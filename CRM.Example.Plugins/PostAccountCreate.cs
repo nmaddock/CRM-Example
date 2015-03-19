@@ -53,7 +53,7 @@ namespace CRM.Example.CRM.Example.Plugins
                 throw new ArgumentNullException("localContext");
             }
 
-            // TODO: Implement your custom Plug-in business logic.
+            // TODO: Implement your custom Plug-in business logic.  
         }
     }
 }
