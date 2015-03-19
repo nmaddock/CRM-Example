@@ -1,7 +1,18 @@
 <?xml version="1.0"?>
 <Register xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns="http://schemas.microsoft.com/crm/2011/tools/pluginregistration">
   <Solutions>
-    <Solution Assembly="CRM.Example.CRM.Example.Plugins.dll" Id="00000000-0000-0000-0000-000000000000" IsolationMode="Sandbox" SourceType="Database" />
+    <Solution Assembly="CRM.Example.CRM.Example.Plugins.dll" Id="00000000-0000-0000-0000-000000000000" IsolationMode="Sandbox" SourceType="Database">
+      <PluginTypes>
+        <Plugin Description="Plug-in to PostAddressCreate" FriendlyName="PostAddressCreate" Name="CRM.Example.CRM.Example.Plugins.PostAddressCreate" Id="00000000-0000-0000-0000-000000000000" TypeName="CRM.Example.CRM.Example.Plugins.PostAddressCreate">
+          <Steps>
+            <clear />
+            <Step CustomConfiguration="" Name="PostAddressCreate" Description="Post-Operation of Address Create" Id="00000000-0000-0000-0000-000000000000" MessageName="Create" Mode="Synchronous" PrimaryEntityName="customeraddress" Rank="1" SecureConfiguration="" Stage="PostOutsideTransaction" SupportedDeployment="ServerOnly">
+              <Images />
+            </Step>
+          </Steps>
+        </Plugin>
+      </PluginTypes>
+    </Solution>
     <Solution Assembly="CRM.Example.CRM.Example.Custom.Workflow.Activities.dll" Id="00000000-0000-0000-0000-000000000000" IsolationMode="None" SourceType="Database" />
   </Solutions>
   <XamlWorkflows />
