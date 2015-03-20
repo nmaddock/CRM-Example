@@ -1,0 +1,296 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+	<UsingTask AssemblyFile="Microsoft.CrmDeveloperTools.dll" TaskName="Microsoft.CrmDeveloperTools.CrmClient.MSBuild.RegisterPlugin" />
+	<UsingTask AssemblyFile="Microsoft.CrmDeveloperTools.dll" TaskName="Microsoft.CrmDeveloperTools.CrmClient.MSBuild.AddWebResource" />
+	<UsingTask AssemblyFile="Microsoft.CrmDeveloperTools.dll" TaskName="Microsoft.CrmDeveloperTools.CrmClient.MSBuild.ImportSolution" />
+	<UsingTask AssemblyFile="Microsoft.CrmDeveloperTools.dll" TaskName="Microsoft.CrmDeveloperTools.CrmClient.MSBuild.ExportSolution" />
+  <UsingTask AssemblyFile="Microsoft.CrmDeveloperTools.dll" TaskName="Microsoft.CrmDeveloperTools.CrmClient.MSBuild.AddXamlWorkflow" />
+  
+	<PropertyGroup>
+    <!-- By default, do not export a solution -->
+    <ExportSolution Condition="'$(ExportSolution)' == ''">false</ExportSolution>
+    
+    
+		<!-- Original full CoreBuild target list -->
+		<!--BuildOnlySettings;
+		PrepareForBuild;
+		PreBuildEvent;
+		UnmanagedUnregistration;
+		ResolveReferences;
+		PrepareResources;
+		ResolveKeySource;
+		Compile;
+		GenerateSerializationAssemblies;
+		CreateSatelliteAssemblies;
+		GenerateManifests;
+		GetTargetPath;
+		PrepareForRun;
+		UnmanagedRegistration;
+		IncrementalClean;
+		PostBuildEvent-->
+		<BuildDependsOn>
+			BuildOnlySettings;
+			PrepareForBuild;
+			PreBuildEvent;
+			ResolveReferences;
+			GetTargetPath;
+			CopyFilesToOutputDirectory;
+			CopySilverlightApplications;
+			IncrementalClean;
+			PostBuildEvent
+		</BuildDependsOn>
+		<!-- Setting this property to true will cause the CopyFilesToOutputDirectory target in Microsoft.Common.targets not to copy the IntermediateAssembly (we don't have one) to the output directory. -->
+		<SkipCopyBuildProduct>true</SkipCopyBuildProduct>
+	</PropertyGroup>
+	<!--
+		============================================================
+		_GetSilverlightApplications
+
+		Converts the list of Silverlight Applications that are defined as references in the project.
+		============================================================
+		-->
+	<Target Name="_GetSilverlightApplications">
+		<!-- Build the silverlight application list from those project references that have the SilverlightApplication property set -->
+		<ItemGroup>
+			<_SilverlightApplications Include="@(ProjectReference)" Condition="'%(SilverlightApplication)' == 'true'" />
+		</ItemGroup>
+	</Target>
+	<!-- Options 1
+			1.  Modify Add Reference to include a property as for the Web Project if the reference is to a Silver Application 
+		 -->
+
+	<Target Name="GetXapOutputFiles" DependsOnTargets="_GetSilverlightApplications">
+		<!--
+				When building this project from the IDE or when building a .SLN from the command-line,
+				just gather the referenced build outputs (Xap files).  The code that builds the .SLN will already have
+				built the project, so there's no need to do it again here.
+
+				The ContinueOnError setting is here so that, during project load, as
+				much information as possible will be passed to the compilers.
+				-->
+		<MSBuild Projects="@(_SilverlightApplications)" Targets="GetXapOutputFile" BuildInParallel="false" Properties="%(_MSBuildProjectReferenceExistent.SetConfiguration);%(_MSBuildProjectReferenceExistent.SetPlatform);BuildingSolutionFile=false" Condition="'@(_SilverlightApplications)' != ''" ContinueOnError="!$(BuildingProject)">
+			<Output TaskParameter="TargetOutputs" ItemName="_SilverlightXapFiles" >
+				
+			</Output>
+			
+		</MSBuild>    
+	</Target>
+	<!--
+	============================================================
+	CopySilverlightApplications
+
+	This target copies the output xap files from referenced
+	Silverlight application projects to the target folder.
+	============================================================
+	-->
+	<Target Name="CopySilverlightApplications" DependsOnTargets="_GetSilverlightApplications;GetXapOutputFiles" Outputs="@(_WebApplicationSilverlightXapFiles)">
+		<PropertyGroup>
+			<CRMWebResourcesFolder>WebResources</CRMWebResourcesFolder>
+			<CRMXAPWebResourcesFolder>$(CRMWebResourcesFolder)\Silverlight (XAP)</CRMXAPWebResourcesFolder>
+		</PropertyGroup>
+	 
+		<!--
+				Build referenced projects when building from the command line.
+
+				The $(ProjectReferenceBuildTargets) will normally be blank so that the project's default
+				target is used during a P2P reference. However if a custom build process requires that
+				the referenced project has a different target to build it can be specified.
+				-->
+		<MSBuild Projects="@(_SilverlightApplications)" Targets="$(ProjectReferenceBuildTargets)" Properties="%(_MSBuildProjectReferenceExistent.SetConfiguration);%(_MSBuildProjectReferenceExistent.SetPlatform);BuildingSolutionFile=false" BuildInParallel="false" Condition="'$(BuildingInsideVisualStudio)' != 'true' and '@(_SilverlightApplications)' != ''">
+		</MSBuild>
+		<!--Copy the outputs to the target folder to the WebResources Silverlight folder-->
+		<Copy SourceFiles="@(_SilverlightXapFiles)" DestinationFolder="$(OutDir)\$(CRMXAPWebResourcesFolder)" Condition="'@(_SilverlightXapFiles)' != ''">
+			<Output TaskParameter="DestinationFiles" ItemName="_WebApplicationSilverlightXapFiles" />
+		</Copy>
+		<!-- Issue a warning for each non-existent project. -->
+		<Warning Text="The referenced Silverlight project '%(_SilverlightApplicationsNotExist.Identity)' does not exist." Condition="'@(_SilverlightApplicationsNotExist)'!=''" />
+	</Target>
+
+	<!--
+	============================================================
+	CopyCRMWebResources
+
+	This target copies the CRM Web Resources to the output folder
+	============================================================
+	-->
+	<Target Name="CopyCRMWebResources" >
+		<!--Copy the outputs to the target folder to the WebResources Silverlight folder-->
+		<Copy SourceFiles="@(CRMWebResources)" DestinationFolder="$(OutDir)\$(CRMWebResourcesFolder)" Condition="'@(CRMWebResources)' != ''">
+			<Output TaskParameter="DestinationFiles" ItemName="_CRMWebResourcesOutputFiles" />
+			<!-- TODO Add to Cleanup -->
+		</Copy>
+
+	</Target>
+	<!--
+	============================================================
+	Deploy 
+
+	This target deploys all plugins and web resources.
+	============================================================
+	-->
+
+	<PropertyGroup>
+		<DeployDependsOn>
+      BeforeDeploy;
+      PreDeployEvent;
+      SolutionDeploy;
+      PluginsAndWorkflowsDeploy;
+      WebResourcesDeploy;
+      XamlWorkflowDeploy;
+      SolutionExport;
+      PostDeployEvent;
+      AfterDeploy
+    </DeployDependsOn>
+	</PropertyGroup>
+
+	<!-- Provided for future extension -->
+	<Target Name="BeforeDeploy" />
+
+	<!-- Provided for future extension -->
+	<Target Name="PreDeployEvent" />
+
+	<!-- Provided for future extension -->
+	<Target Name="PostDeployEvent" />
+
+	<!-- Provided for future extension -->
+	<Target Name="AfterDeploy" />
+
+	<!-- Top-level target to Deploy the CRM Package -->
+	<Target Name="Deploy" DependsOnTargets="$(DeployDependsOn)">
+
+		<OnError ExecuteTargets="PostDeployEvent" Condition="'$(RunPostDeployEvent)'=='Always'"/>
+	</Target>
+
+	<PropertyGroup>
+		<WorkingFolder Condition="'$(WorkingFolder)' == ''" >$(OutDir)</WorkingFolder>
+	</PropertyGroup>
+
+	<!--
+		============================================================
+		PluginsAndWorkflowsDeploy
+
+		Deploy the Plugins and Workflows using the registration file(s)
+		============================================================		-->
+	<Target Name="PluginsAndWorkflowsDeploy" Condition="'@(RegisterPlugin)' != ''">
+		<Message Text="WorkingFolder: $(Workingfolder)" Importance="high" />
+		<RegisterPlugin				
+				DiscoveryServer="$(CRMDiscoveryServer)"
+				Port="$(CRMDiscoveryServerPort)"
+				Scheme="$(CRMDiscoveryServerScheme)"
+				Organization="$(CRMOrganization)"
+				Password="$(CRMUserPassword)"
+				UserName="$(CRMUserName)"
+				Domain="$(CRMUserDomain)"
+				SolutionName="$(CRMSolutionName)"
+				
+				RegistrationFile="%(RegisterPlugin.Identity)"
+				WorkingFolder="$(WorkingFolder)"
+		/>
+	</Target>
+
+  
+  <!--
+  	============================================================
+    XamlWorkflowDeploy
+    
+    Deploys any custom Xaml Workflow activities using the registration file
+		============================================================
+  -->
+  <Target Name="XamlWorkflowDeploy" Condition="'@(RegisterPlugin)' != ''">
+    <Message Text="WorkingFolder: $(Workingfolder)" Importance="high" />
+    <AddXamlWorkflow
+      DiscoveryServer="$(CRMDiscoveryServer)"
+      Port="$(CRMDiscoveryServerPort)"
+      Scheme="$(CRMDiscoveryServerScheme)"
+      Organization="$(CRMOrganization)"
+      Password="$(CRMUserPassword)"
+      UserName="$(CRMUserName)"
+      Domain="$(CRMUserDomain)"
+      SolutionName="$(CRMSolutionName)"
+      
+      RegistrationFile="%(RegisterPlugin.Identity)"
+      WorkingFolder="$(WorkingFolder)"
+    />
+  </Target>
+	<!--
+		============================================================
+		GetWebResourcesFromReferences
+
+		Determine the web resource information from any silverlight references.
+		============================================================		-->
+
+	<Target  Name="GetWebResourcesFromReferences" DependsOnTargets="GetXapOutputFiles;_GetSilverlightApplications" >
+		<!-- _SilverlightApplications contains all the silver project references -->
+    <!-- _SilverlightXapFiles contains all the XAP Files -->
+    <!--<ItemGroup Include="@(_SilverlightXapFiles)" Condition="%(_SilverlightXapFiles.SilverlightSourceProject)' == '%(_SilverlightApplications.Identity)'">
+      <SilverlightVersion>v4.0</SilverlightVersion>
+      <Description>%(_SilverlightApplications.)</Description>
+      <DisplayName></DisplayName>
+      <WebResourceType></WebResourceType>
+      <UniqueName></UniqueName>
+      <WebResourceLanguage></WebResourceLanguage>
+    </ItemGroup>-->
+  </Target>
+	<!--
+		============================================================
+		PluginsAndWorkflowsDeploy
+
+		Deploy the Plugins and Workflows using the registration file(s)
+		============================================================		-->
+
+  <Target Name="WebResourcesDeploy" DependsOnTargets ="GetWebResourcesFromReferences">
+    <AddWebResource
+				DiscoveryServer="$(CRMDiscoveryServer)"
+				Port="$(CRMDiscoveryServerPort)"
+				Scheme="$(CRMDiscoveryServerScheme)"
+				Organization="$(CRMOrganization)"
+				Password="$(CRMUserPassword)"
+				UserName="$(CRMUserName)"
+				Domain="$(CRMUserDomain)"
+				SolutionName="$(CRMSolutionName)"
+					
+				Items="@(CRMWebResource)"
+        XAPOutputs="@(_SilverlightXapFiles)"
+        XAPReferences="@(_SilverlightApplications)"
+        MSBuildProjectFullPath="$(MSBuildProjectFullPath)"
+        
+					 />
+  </Target>
+
+  <!-- Deploy Solution -->
+	<Target Name="SolutionDeploy" Condition="'@(CRMSolution)' != ''">
+		<ImportSolution
+			 DiscoveryServer="$(CRMDiscoveryServer)"
+				Port="$(CRMDiscoveryServerPort)"
+				Scheme="$(CRMDiscoveryServerScheme)"
+				Organization="$(CRMOrganization)"
+				Password="$(CRMUserPassword)"
+				UserName="$(CRMUserName)"
+				Domain="$(CRMUserDomain)"
+				SolutionName="$(CRMSolutionName)"
+			 
+				Items="@(CRMSolution)" />
+	</Target>
+
+  <!-- Export Solution -->
+  <Target Name="SolutionExport" Condition="'$(OutputName)' != '' AND '$(ExportSolution)' == 'true'">
+    <PropertyGroup>
+      <OutputSolutionFile Condition="'$(OutputPath)' != '' AND HasTrailingSlash('$(OutputPath)')">$(OutputPath)$(OutputName).zip</OutputSolutionFile>
+      <OutputSolutionFile Condition="'$(OutputPath)' != '' AND !HasTrailingSlash('$(OutputPath)')">$(OutputPath)\$(OutputName).zip</OutputSolutionFile>
+      <OutputSolutionFile Condition="'$(OutputPath)' == ''">$(OutputName).zip</OutputSolutionFile>
+    </PropertyGroup>
+      
+    <ExportSolution        
+			  DiscoveryServer="$(CRMDiscoveryServer)"
+				Port="$(CRMDiscoveryServerPort)"
+				Scheme="$(CRMDiscoveryServerScheme)"
+				Organization="$(CRMOrganization)"
+				Password="$(CRMUserPassword)"
+				UserName="$(CRMUserName)"
+				Domain="$(CRMUserDomain)"
+				SolutionName="$(CRMSolutionName)"        
+				SolutionFile="$(OutputSolutionFile)" />
+  </Target>
+  
+
+</Project>
