@@ -28,7 +28,7 @@ namespace CRM.Example.CRM.Example.Plugins
             base.RegisteredEvents.Add(new Tuple<int, string, string, Action<LocalPluginContext>>(40, "Create", "account", new Action<LocalPluginContext>(ExecutePostAccountCreate)));
 
             // Note : you can register for more events here if this plugin is not specific to an individual entity and message combination.
-            // You may also need to update your RegisterFile.crmregister plug-in registration file to reflect any change.
+            // You may also need to update your RegisterFile.crmregister plug-in registration file to reflect any change.  
         }
 
         /// <summary>
